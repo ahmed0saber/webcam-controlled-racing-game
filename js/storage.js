@@ -4,6 +4,7 @@ const DEFAULTS = {
   bestScore: 0,
   sound: true,
   sensitivity: 1,
+  cameraId: "",
 };
 
 let memory = null;
@@ -19,6 +20,7 @@ function sanitize(data) {
     bestScore: Math.max(0, Math.floor(Number(data.bestScore) || 0)),
     sound: Boolean(data.sound),
     sensitivity: clampSensitivity(data.sensitivity),
+    cameraId: typeof data.cameraId === "string" ? data.cameraId.slice(0, 256) : "",
   };
 }
 

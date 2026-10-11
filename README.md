@@ -30,7 +30,7 @@ Any other static server is fine. Deploy the folder as-is to an HTTPS host. Camer
 **Camera**
 
 1. Choose **Play with camera**.
-2. Choose **Enable camera** and allow the prompt. The preview is mirrored.
+2. Choose **Enable camera** and allow the prompt. Pick **NVIDIA Broadcast**, or any other camera, from the camera list. The preview is mirrored.
 3. Hold both hands up until both wrists are in frame.
 4. Hold the imaginary wheel straight. After about a second of steady samples, the race starts.
 5. Turning left steers the car left. Turning right steers right.
@@ -54,7 +54,8 @@ Recalibrate any time from the dock or the pause menu. The best score, sound sett
 | --- | --- |
 | Blank page or module errors | Use a local HTTP server. Do not open `index.html` directly. |
 | Camera button does nothing useful | Allow camera permission in the site settings, then click **Enable camera** again. |
-| No camera found | Plug in a webcam or choose **Play with keyboard**. |
+| No camera found | Plug in a webcam, start NVIDIA Broadcast, or choose **Play with keyboard**. |
+| NVIDIA Broadcast is missing | Leave the NVIDIA Broadcast app running, then choose **NVIDIA Broadcast** in the camera list. It is the same virtual camera Meet, Zoom, and Teams use. |
 | Camera in use | Close other apps that hold the webcam. |
 | Pose model fails to load | The first camera start downloads MediaPipe. Check your connection, then try again. Keyboard mode still works offline after the page itself has loaded. |
 | Steering feels backwards | Use the mirrored preview. Your left hand should appear on the left. Recalibrate while holding the wheel straight. |

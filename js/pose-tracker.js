@@ -62,7 +62,7 @@ function cameraErrorMessage(error) {
     return "Camera permission was denied. Allow camera access in the browser site settings, then try again. Keyboard mode is ready whenever you are.";
   }
   if (name === "NotFoundError" || name === "DevicesNotFoundError") {
-    return "No camera was found. Plug in a webcam, or play with the keyboard.";
+    return "No camera was found. Plug in a webcam, start NVIDIA Broadcast, or play with the keyboard.";
   }
   if (name === "NotReadableError" || name === "TrackStartError") {
     return "The camera is busy or could not be opened. Close other apps using it, then try again. Keyboard mode still works.";
@@ -91,6 +91,17 @@ export class PoseTracker {
     this.lastTs = -1;
     this._lastInfer = 0;
     this._inferErrorLogged = false;
+    this.deviceId = "";
+  }
+
+  async listCameras() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return [];
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      return devices.filter((device) => device.kind === "videoinput" && device.deviceId);
+    } catch {
+      return [];
+    }
   }
 
   async loadModel() {
@@ -143,96 +154,53 @@ export class PoseTracker {
     }
   }
 
-  async enable() {
-    if (this.active && this.stream) return { ok: true };
-    if (this._starting) return this._starting;
-    this._starting = this._enable();
+  async enable(options = {}) {
+    const deviceId = typeof options.deviceId === "string" ? options.deviceId : "";
+    const preferBroadcast = !deviceId && options.preferBroadcast !== false;
+    if (this.active && this.stream && (!deviceId || deviceId === this.deviceId)) {
+      const devices = await this.listCameras();
+      return { ok: true, deviceId: this.deviceId, devices };
+    }
+    const run = (this._starting || Promise.resolve()).then(() => this._enable(deviceId, preferBroadcast));
+    this._starting = run;
     try {
-      return await this._starting;
+      return await run;
     } finally {
-      this._starting = null;
+      if (this._starting === run) this._starting = null;
     }
   }
 
-  async _enable() {
-    this.error = null;
-    if (!window.isSecureContext) {
-      this.error = "Camera access needs localhost or HTTPS. Keyboard mode does not need a camera.";
-      return { ok: false, message: this.error };
-    }
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      this.error = "This browser cannot open a camera. Play with the keyboard, or use a current version of Chrome, Edge, or Firefox.";
-      return { ok: false, message: this.error };
-    }
-
-    let stream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: "user",
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-          frameRate: { ideal: 30, max: 30 },
-        },
-      });
-    } catch (error) {
-      if (error && error.name === "OverconstrainedError") {
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: "user" } });
-        } catch (fallbackError) {
-          this.stop();
-          this.error = cameraErrorMessage(fallbackError);
-          return { ok: false, message: this.error };
-        }
-      } else {
-        this.stop();
-        this.error = cameraErrorMessage(error);
-        return { ok: false, message: this.error };
+  async _openStream(deviceId) {
+    const sized = {
+      width: { ideal: 640 },
+      height: { ideal: 480 },
+      frameRate: { ideal: 30, max: 30 },
+    };
+    // Virtual cameras such as NVIDIA Broadcast do not report facingMode.
+    // Asking for a user-facing camera hides them from Chrome, Edge, and Firefox.
+    const attempts = deviceId
+      ? [
+        { audio: false, video: { deviceId: { exact: deviceId }, ...sized } },
+        { audio: false, video: { deviceId: { exact: deviceId } } },
+      ]
+      : [
+        { audio: false, video: sized },
+        { audio: false, video: true },
+      ];
+    let lastError;
+    for (const constraints of attempts) {
+      try {
+        return await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (error) {
+        lastError = error;
+        const name = error && error.name;
+        if (name === "NotAllowedError" || name === "PermissionDeniedError" || name === "SecurityError") throw error;
       }
     }
-
-    try {
-      await this.loadModel();
-    } catch (error) {
-      stream.getTracks().forEach((track) => track.stop());
-      this.error = error.message || "The pose model could not be loaded.";
-      return { ok: false, message: this.error };
-    }
-
-    this.stream = stream;
-    this.video.srcObject = stream;
-    this.video.muted = true;
-    this.video.playsInline = true;
-    try {
-      await this.video.play();
-    } catch {
-      this.stop();
-      this.error = "The camera preview could not start. Try the enable button again, or play with the keyboard.";
-      return { ok: false, message: this.error };
-    }
-
-    const [track] = stream.getVideoTracks();
-    if (track) {
-      track.onended = () => {
-        if (!this.active) return;
-        this.active = false;
-        this.snapshot = null;
-        this.error = "The camera disconnected. Reconnect it, or switch to keyboard controls.";
-        if (this.onDisconnect) this.onDisconnect(this.error);
-      };
-    }
-
-    this.active = true;
-    this.lastTs = -1;
-    this._lastInfer = 0;
-    return { ok: true };
+    throw lastError;
   }
 
-  stop() {
-    this.active = false;
-    this.busy = false;
-    this.snapshot = null;
+  _releaseStream() {
     if (this.stream) {
       this.stream.getTracks().forEach((track) => {
         track.onended = null;
@@ -241,6 +209,139 @@ export class PoseTracker {
       this.stream = null;
     }
     if (this.video) this.video.srcObject = null;
+  }
+
+  _trackDeviceId(stream) {
+    const [track] = stream.getVideoTracks();
+    const settings = track && track.getSettings ? track.getSettings() : null;
+    return (settings && settings.deviceId) || "";
+  }
+
+  _watchTrack(stream) {
+    const [track] = stream.getVideoTracks();
+    if (!track) return;
+    track.onended = () => {
+      if (!this.active || this.stream !== stream) return;
+      this.active = false;
+      this.snapshot = null;
+      this.error = "The camera disconnected. Reconnect it, or switch to keyboard controls.";
+      if (this.onDisconnect) this.onDisconnect(this.error);
+    };
+  }
+
+  async _play(stream) {
+    this.stream = stream;
+    this.video.srcObject = stream;
+    this.video.muted = true;
+    this.video.playsInline = true;
+    await this.video.play();
+    this._watchTrack(stream);
+    this.deviceId = this._trackDeviceId(stream);
+    this.active = true;
+    this.lastTs = -1;
+    this._lastInfer = 0;
+  }
+
+  async _enable(deviceId, preferBroadcast) {
+    this.error = null;
+    if (!window.isSecureContext) {
+      this.error = "Camera access needs localhost or HTTPS. Keyboard mode does not need a camera.";
+      return { ok: false, message: this.error, devices: [] };
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      this.error = "This browser cannot open a camera. Play with the keyboard, or use a current version of Chrome, Edge, or Firefox.";
+      return { ok: false, message: this.error, devices: [] };
+    }
+    if (this.active && this.stream && deviceId && deviceId === this.deviceId) {
+      const devices = await this.listCameras();
+      return { ok: true, deviceId: this.deviceId, devices };
+    }
+
+    const previousId = this.deviceId;
+    this.active = false;
+    this._releaseStream();
+
+    let stream;
+    try {
+      stream = await this._openStream(deviceId);
+    } catch (error) {
+      const denied = error && (error.name === "NotAllowedError" || error.name === "PermissionDeniedError" || error.name === "SecurityError");
+      if (!denied) {
+        try {
+          stream = await this._openStream("");
+        } catch (fallbackError) {
+          this.stop();
+          this.error = cameraErrorMessage(fallbackError);
+          return { ok: false, message: this.error, devices: await this.listCameras() };
+        }
+      } else {
+        this.stop();
+        this.error = cameraErrorMessage(error);
+        return { ok: false, message: this.error, devices: [] };
+      }
+    }
+
+    try {
+      await this.loadModel();
+      await this._play(stream);
+    } catch (error) {
+      stream.getTracks().forEach((track) => track.stop());
+      this.stream = null;
+      if (this.video) this.video.srcObject = null;
+      this.active = false;
+      if (previousId && previousId !== deviceId) {
+        try {
+          const restored = await this._openStream(previousId);
+          await this._play(restored);
+          const devices = await this.listCameras();
+          this.error = "That camera could not be opened. The previous camera is still on.";
+          return { ok: false, message: this.error, deviceId: this.deviceId, devices };
+        } catch {
+          this.stop();
+        }
+      }
+      this.error = error && error.message && error.message.includes("pose")
+        ? error.message
+        : (error && error.name === "NotAllowedError"
+          ? cameraErrorMessage(error)
+          : "The camera preview could not start. Try the enable button again, or play with the keyboard.");
+      return { ok: false, message: this.error, devices: await this.listCameras() };
+    }
+
+    let devices = await this.listCameras();
+    const broadcast = devices.find((device) => /nvidia\s*broadcast/i.test(device.label || ""));
+    const shouldUseBroadcast = preferBroadcast && broadcast && broadcast.deviceId && broadcast.deviceId !== this.deviceId;
+    const requestedMissing = deviceId && deviceId !== this.deviceId && devices.some((device) => device.deviceId === deviceId);
+    const switchId = shouldUseBroadcast ? broadcast.deviceId : (requestedMissing ? deviceId : "");
+    if (switchId) {
+      const openedId = this.deviceId;
+      this.active = false;
+      this._releaseStream();
+      try {
+        const switched = await this._openStream(switchId);
+        await this._play(switched);
+        devices = await this.listCameras();
+      } catch {
+        try {
+          const restored = await this._openStream(openedId);
+          await this._play(restored);
+        } catch {
+          this.stop();
+          this.error = cameraErrorMessage(new DOMException("", "NotReadableError"));
+          return { ok: false, message: this.error, devices };
+        }
+      }
+    }
+
+    return { ok: true, deviceId: this.deviceId, devices };
+  }
+
+  stop() {
+    this.active = false;
+    this.busy = false;
+    this.snapshot = null;
+    this.deviceId = "";
+    this._releaseStream();
   }
 
   requestFrame(now) {

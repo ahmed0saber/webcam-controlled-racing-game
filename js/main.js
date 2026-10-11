@@ -285,25 +285,66 @@ function playAgain() {
   beginCountdown();
 }
 
-async function enableCamera() {
+function fillCameraList(devices, selectedId) {
+  const select = $("camera-select");
+  const picker = $("camera-picker");
+  if (!devices.length) {
+    picker.hidden = true;
+    return;
+  }
+  const current = selectedId || select.value;
+  select.replaceChildren();
+  for (const device of devices) {
+    const option = document.createElement("option");
+    option.value = device.deviceId;
+    option.textContent = device.label || "Camera";
+    select.append(option);
+  }
+  if (devices.some((device) => device.deviceId === current)) select.value = current;
+  picker.hidden = false;
+}
+
+async function refreshCameraList() {
+  const devices = await pose.listCameras();
+  const labeled = devices.some((device) => device.label);
+  if (!labeled && !pose.active) {
+    $("camera-picker").hidden = true;
+    return;
+  }
+  fillCameraList(devices, pose.deviceId || save.cameraId);
+}
+
+async function enableCamera(deviceId) {
   audio.unlock();
   const button = $("btn-enable-camera");
+  const requested = typeof deviceId === "string" ? deviceId : (save.cameraId || "");
   button.disabled = true;
-  button.textContent = "Starting camera…";
+  button.textContent = pose.active ? "Switching camera…" : "Starting camera…";
   $("camera-error").hidden = true;
-  const result = await pose.enable();
+  const result = await pose.enable({
+    deviceId: requested,
+    preferBroadcast: !requested,
+  });
   button.disabled = false;
-  if (!result.ok) {
+  fillCameraList(result.devices || [], result.deviceId || requested);
+  if (!result.ok && !pose.active) {
     button.textContent = "Enable camera";
     $("camera-error").hidden = false;
     $("camera-error").textContent = result.message;
     setLive(result.message);
     return;
   }
+  if (result.deviceId) save = writeSave({ cameraId: result.deviceId });
+  if (!result.ok && result.message) {
+    $("camera-error").hidden = false;
+    $("camera-error").textContent = result.message;
+  }
   mode = "camera";
   syncModeButtons();
   updateCameraActions();
-  setLive("Camera on. Keep both hands in view.");
+  const selected = $("camera-select").selectedOptions[0];
+  const name = selected ? selected.textContent : "Camera";
+  setLive(`${name} on. Keep both hands in view.`);
 }
 
 function selectKeyboard() {
@@ -586,7 +627,15 @@ function init() {
   $("btn-menu-sound").addEventListener("click", () => { audio.unlock(); setSound(!save.sound); });
   $("btn-sound").addEventListener("click", () => { audio.unlock(); setSound(!save.sound); });
   $("btn-pause-sound").addEventListener("click", () => { audio.unlock(); setSound(!save.sound); });
-  $("btn-enable-camera").addEventListener("click", enableCamera);
+  $("btn-enable-camera").addEventListener("click", () => { enableCamera(); });
+  $("camera-select").addEventListener("change", () => {
+    const id = $("camera-select").value;
+    save = writeSave({ cameraId: id });
+    if (pose.active) enableCamera(id);
+  });
+  if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+    navigator.mediaDevices.addEventListener("devicechange", () => { refreshCameraList(); });
+  }
   $("btn-step1-next").addEventListener("click", () => { setupStep = 2; showSetupStep(); });
   $("btn-step1-recal").addEventListener("click", () => startCalibration("onboarding"));
   $("btn-step1-keyboard").addEventListener("click", () => {
