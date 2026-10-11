@@ -31,7 +31,7 @@ Any other static server is fine. Deploy the folder as-is to an HTTPS host. Camer
 
 1. Choose **Play with camera**.
 2. Choose **Enable camera** and allow the prompt. Pick **NVIDIA Broadcast**, or any other camera, from the camera list. The preview is mirrored.
-3. Hold both hands up until both wrists are in frame.
+3. Show both hands, palms toward the camera. Steering follows the tilt between your palms.
 4. Hold the imaginary wheel straight. After about a second of steady samples, the race starts.
 5. Turning left steers the car left. Turning right steers right.
 
@@ -57,9 +57,9 @@ Recalibrate any time from the dock or the pause menu. The best score, sound sett
 | No camera found | Plug in a webcam, start NVIDIA Broadcast, or choose **Play with keyboard**. |
 | NVIDIA Broadcast is missing | Leave the NVIDIA Broadcast app running, then choose **NVIDIA Broadcast** in the camera list. It is the same virtual camera Meet, Zoom, and Teams use. |
 | Camera in use | Close other apps that hold the webcam. |
-| Pose model fails to load | The first camera start downloads MediaPipe. Check your connection, then try again. Keyboard mode still works offline after the page itself has loaded. |
+| Hand model fails to load | The first camera start downloads MediaPipe. Check your connection, then try again. Keyboard mode still works offline after the page itself has loaded. |
 | Steering feels backwards | Use the mirrored preview. Your left hand should appear on the left. Recalibrate while holding the wheel straight. |
-| Steering jitters | Lower the sensitivity slider and keep both wrists visible. Small motion inside the dead zone is ignored. |
+| Steering jitters | Lower the sensitivity slider and keep both palms toward the camera. Small motion inside the dead zone is ignored. |
 | Tracking lost | The wheel holds briefly, then returns to center. Bring both hands back into view. It will not snap to full lock. |
 | Page was hidden | The race pauses so time does not jump when you come back. Press Resume. |
 | Best score did not save | The browser may be blocking storage. The score still shows for the current visit. |
@@ -69,7 +69,7 @@ Recalibrate any time from the dock or the pause menu. The best score, sound sett
 Loaded only after you enable the camera:
 
 - [@mediapipe/tasks-vision 0.10.20](https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.20) from jsDelivr, including its WASM files
-- [Pose landmarker lite](https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task) from Google’s MediaPipe model host
+- [Hand landmarker](https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task) from Google’s MediaPipe model host
 
 Sound effects are synthesized with the Web Audio API. No audio files are required. The car, road, traffic, and coins are drawn on a canvas.
 

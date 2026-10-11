@@ -344,7 +344,7 @@ async function enableCamera(deviceId) {
   updateCameraActions();
   const selected = $("camera-select").selectedOptions[0];
   const name = selected ? selected.textContent : "Camera";
-  setLive(`${name} on. Keep both hands in view.`);
+  setLive(`${name} on. Show both hands, palms toward the camera.`);
 }
 
 function selectKeyboard() {
@@ -433,15 +433,15 @@ function refreshSetup(dt) {
     return;
   }
   const snap = pose.snapshot;
-  const wrists = Boolean(snap && snap.wristOk);
-  setCheck("check-wrists", "Wrists", wrists);
+  const hands = Boolean(snap && snap.handsOk);
+  setCheck("check-hands", "Hands", hands);
   if (!positionReady) {
-    poseHold = wrists ? poseHold + dt : 0;
+    poseHold = hands ? poseHold + dt : 0;
     if (poseHold > 0.35) positionReady = true;
   }
   const button = $("btn-step2-next");
   button.disabled = !positionReady;
-  button.textContent = positionReady ? "Next" : "Hold that pose";
+  button.textContent = positionReady ? "Next" : "Show both hands";
 }
 
 function setCheck(id, label, ok) {

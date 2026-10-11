@@ -1,23 +1,19 @@
 /**
- * Webcam pose tracking via MediaPipe Tasks Vision.
+ * Webcam hand tracking via MediaPipe Tasks Vision.
  *
  * External dependencies (loaded only after the player enables the camera):
  * - https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.20
- * - https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task
+ * - https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task
  *
  * Frames stay in the browser. Nothing is uploaded.
  */
 
 const VISION_CDN = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.20";
 const WASM_CDN = `${VISION_CDN}/wasm`;
-const MODEL_URL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
+const MODEL_URL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
 
-const LEFT_SHOULDER = 11;
-const RIGHT_SHOULDER = 12;
-const LEFT_ELBOW = 13;
-const RIGHT_ELBOW = 14;
-const LEFT_WRIST = 15;
-const RIGHT_WRIST = 16;
+const PALM = [0, 5, 9, 17];
+const FINGERTIPS = [4, 8, 12, 16, 20];
 
 function visibilityOf(landmark) {
   if (!landmark) return 0;
@@ -45,15 +41,23 @@ function inFrame(point, minVis) {
 }
 
 export function assessPose(points) {
-  const { leftWrist: lw, rightWrist: rw } = points;
-  const leftSeen = inFrame(lw, 0.5);
-  const rightSeen = inFrame(rw, 0.5);
-  const wristOk = leftSeen && rightSeen;
-  const wristsStrong = inFrame(lw, 0.65) && inFrame(rw, 0.65);
+  const { leftHand: lh, rightHand: rh } = points;
+  const leftSeen = inFrame(lh, 0.5);
+  const rightSeen = inFrame(rh, 0.5);
+  const handsOk = leftSeen && rightSeen;
+  const handsStrong = inFrame(lh, 0.6) && inFrame(rh, 0.6);
   let quality = "lost";
-  if (wristsStrong) quality = "stable";
+  if (handsStrong) quality = "stable";
   else if (leftSeen || rightSeen) quality = "weak";
-  return { wristOk, quality };
+  return { handsOk, quality };
+}
+
+function palmPoint(landmarks, score) {
+  const pts = PALM.map((index) => landmarks[index]).filter(Boolean);
+  if (pts.length < 3) return null;
+  const x = pts.reduce((sum, point) => sum + point.x, 0) / pts.length;
+  const y = pts.reduce((sum, point) => sum + point.y, 0) / pts.length;
+  return mirrorPoint({ x, y, visibility: score });
 }
 
 function cameraErrorMessage(error) {
@@ -120,34 +124,34 @@ export class PoseTracker {
     try {
       visionModule = await import(VISION_CDN);
     } catch (error) {
-      const failure = new Error("The pose library could not be downloaded. Check your connection. Keyboard mode still works.");
+      const failure = new Error("The hand tracker could not be downloaded. Check your connection. Keyboard mode still works.");
       failure.cause = error;
       throw failure;
     }
-    const { PoseLandmarker, FilesetResolver } = visionModule;
+    const { HandLandmarker, FilesetResolver } = visionModule;
     let fileset;
     try {
       fileset = await FilesetResolver.forVisionTasks(WASM_CDN);
     } catch (error) {
-      const failure = new Error("Pose tracking files could not be loaded. Check your connection. Keyboard mode still works.");
+      const failure = new Error("Hand tracking files could not be loaded. Check your connection. Keyboard mode still works.");
       failure.cause = error;
       throw failure;
     }
     const options = (delegate) => ({
       baseOptions: { modelAssetPath: MODEL_URL, delegate },
       runningMode: "VIDEO",
-      numPoses: 1,
-      minPoseDetectionConfidence: 0.5,
-      minPosePresenceConfidence: 0.5,
+      numHands: 2,
+      minHandDetectionConfidence: 0.5,
+      minHandPresenceConfidence: 0.5,
       minTrackingConfidence: 0.5,
     });
     try {
-      this.landmarker = await PoseLandmarker.createFromOptions(fileset, options("GPU"));
+      this.landmarker = await HandLandmarker.createFromOptions(fileset, options("GPU"));
     } catch {
       try {
-        this.landmarker = await PoseLandmarker.createFromOptions(fileset, options("CPU"));
+        this.landmarker = await HandLandmarker.createFromOptions(fileset, options("CPU"));
       } catch (error) {
-        const failure = new Error("The pose model could not be loaded. Check your connection and try again. Keyboard mode still works.");
+        const failure = new Error("The hand model could not be loaded. Check your connection and try again. Keyboard mode still works.");
         failure.cause = error;
         throw failure;
       }
@@ -300,7 +304,7 @@ export class PoseTracker {
           this.stop();
         }
       }
-      this.error = error && error.message && error.message.includes("pose")
+      this.error = error && error.message && error.message.includes("hand")
         ? error.message
         : (error && error.name === "NotAllowedError"
           ? cameraErrorMessage(error)
@@ -360,7 +364,7 @@ export class PoseTracker {
       this.snapshot = null;
       if (!this._inferErrorLogged) {
         this._inferErrorLogged = true;
-        console.error("Pose inference failed", error);
+        console.error("Hand inference failed", error);
       }
     } finally {
       this.busy = false;
@@ -368,31 +372,49 @@ export class PoseTracker {
   }
 
   _parse(result) {
-    const landmarks = result && result.landmarks && result.landmarks[0];
-    if (!landmarks) {
-      return {
-        leftWrist: null,
-        rightWrist: null,
-        leftShoulder: null,
-        rightShoulder: null,
-        leftElbow: null,
-        rightElbow: null,
-        wristOk: false,
-        shouldersOk: false,
-        elbowsOk: false,
-        armsPlausible: false,
-        quality: "lost",
-      };
-    }
-    const points = {
-      leftWrist: mirrorPoint(landmarks[LEFT_WRIST]),
-      rightWrist: mirrorPoint(landmarks[RIGHT_WRIST]),
-      leftShoulder: mirrorPoint(landmarks[LEFT_SHOULDER]),
-      rightShoulder: mirrorPoint(landmarks[RIGHT_SHOULDER]),
-      leftElbow: mirrorPoint(landmarks[LEFT_ELBOW]),
-      rightElbow: mirrorPoint(landmarks[RIGHT_ELBOW]),
+    const empty = {
+      leftHand: null,
+      rightHand: null,
+      leftFingers: [],
+      rightFingers: [],
+      handsOk: false,
+      quality: "lost",
     };
-    return { ...points, ...assessPose(points) };
+    const landmarks = result && result.landmarks;
+    if (!landmarks || !landmarks.length) return empty;
+    const hands = [];
+    for (let i = 0; i < landmarks.length; i += 1) {
+      const lm = landmarks[i];
+      const category = result.handedness && result.handedness[i] && result.handedness[i][0];
+      const score = category && typeof category.score === "number" ? category.score : 1;
+      const palm = palmPoint(lm, score);
+      if (!palm) continue;
+      const fingers = FINGERTIPS
+        .map((index) => (lm[index] ? mirrorPoint({ ...lm[index], visibility: score }) : null))
+        .filter(Boolean);
+      hands.push({ palm, fingers });
+    }
+    if (!hands.length) return empty;
+    hands.sort((a, b) => a.palm.x - b.palm.x);
+    let leftHand = null;
+    let rightHand = null;
+    let leftFingers = [];
+    let rightFingers = [];
+    if (hands.length === 1) {
+      if (hands[0].palm.x < 0.5) {
+        leftHand = hands[0].palm;
+        leftFingers = hands[0].fingers;
+      } else {
+        rightHand = hands[0].palm;
+        rightFingers = hands[0].fingers;
+      }
+    } else {
+      leftHand = hands[0].palm;
+      rightHand = hands[hands.length - 1].palm;
+      leftFingers = hands[0].fingers;
+      rightFingers = hands[hands.length - 1].fingers;
+    }
+    return { leftHand, rightHand, leftFingers, rightFingers, ...assessPose({ leftHand, rightHand }) };
   }
 
   drawPreview(canvas, steering) {
@@ -423,8 +445,8 @@ export class PoseTracker {
     const snap = this.snapshot;
     const quality = steering ? steering.quality : "lost";
     const color = quality === "stable" ? "#3ee0ff" : quality === "weak" ? "#ffd15c" : "#ff5d73";
-    const lw = snap && snap.leftWrist;
-    const rw = snap && snap.rightWrist;
+    const lw = snap && snap.leftHand;
+    const rw = snap && snap.rightHand;
 
     const mark = (point, radius, strong) => {
       if (!point) return;
@@ -433,7 +455,12 @@ export class PoseTracker {
       ctx.arc(point.x * cw, point.y * ch, radius, 0, Math.PI * 2);
       ctx.fill();
     };
-    if (lw && rw && snap.wristOk) {
+    if (snap) {
+      for (const finger of [...(snap.leftFingers || []), ...(snap.rightFingers || [])]) {
+        mark(finger, 3, false);
+      }
+    }
+    if (lw && rw && snap.handsOk) {
       const x1 = lw.x * cw;
       const y1 = lw.y * ch;
       const x2 = rw.x * cw;

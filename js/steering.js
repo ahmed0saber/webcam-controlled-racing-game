@@ -1,5 +1,5 @@
-/** Wrist line angle in degrees. Left wrist is (x1, y1), right wrist is (x2, y2). */
-export function wristAngleDegrees(left, right) {
+/** Angle of the line between two pose points, in degrees. */
+export function lineAngleDegrees(left, right) {
   const rad = Math.atan2(right.y - left.y, right.x - left.x);
   return (rad * 180) / Math.PI;
 }
@@ -85,11 +85,11 @@ export class SteeringController {
       return {
         status: "pending",
         progress: 0,
-        message: "Hold both hands up as a straight wheel, with both wrists visible.",
+        message: "Hold both hands up as a straight wheel, palms toward the camera.",
       };
     }
 
-    const angle = wristAngleDegrees(snapshot.leftWrist, snapshot.rightWrist);
+    const angle = lineAngleDegrees(snapshot.leftHand, snapshot.rightHand);
     if (!this._calibStart) this._calibStart = now;
     this._lastSampleAt = now;
     this._samples.push(angle);
@@ -140,10 +140,10 @@ export class SteeringController {
     const sens = clamp(Number(sensitivity) || 1, 0.5, 2);
     const maxAngle = Math.max(20, 50 / sens);
     const dead = 3.5;
-    const stable = Boolean(snapshot && snapshot.quality === "stable" && snapshot.leftWrist && snapshot.rightWrist);
+    const stable = Boolean(snapshot && snapshot.quality === "stable" && snapshot.leftHand && snapshot.rightHand);
 
     if (stable) {
-      const angle = wristAngleDegrees(snapshot.leftWrist, snapshot.rightWrist);
+      const angle = lineAngleDegrees(snapshot.leftHand, snapshot.rightHand);
       if (snapshot !== this._lastSnap) {
         this._lastSnap = snapshot;
         this._window.push(angle);
@@ -185,7 +185,7 @@ export class SteeringController {
         this._target = this._heldTarget * (1 - fade);
         this.message = fade >= 1
           ? (weak
-            ? "Tracking weak — steering recentered. Keep both wrists in view."
+            ? "Tracking weak — steering recentered. Keep both hands in view."
             : "Tracking lost — steering recentered. Bring both hands back into view.")
           : "Recentering steering until tracking returns";
       }
