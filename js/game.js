@@ -56,7 +56,7 @@ export class Game {
     this.spawnZ = 115;
     while (this.spawnZ < 320) {
       this.spawnWave(this.spawnZ);
-      this.spawnZ += 68;
+      this.spawnZ += 82;
     }
   }
 
@@ -65,8 +65,8 @@ export class Game {
   }
 
   gap() {
-    const reaction = 2.05 - this.difficulty * 0.85;
-    return Math.max(38, Math.max(this.speed, 28) * reaction);
+    const reaction = 2.4 - this.difficulty * 0.7;
+    return Math.max(48, Math.max(this.speed, 28) * reaction);
   }
 
   makeTraffic(z, x) {
@@ -103,7 +103,7 @@ export class Game {
       lanes[j] = tmp;
     }
     const roll = Math.random();
-    const twoCar = this.difficulty < 0.22 ? 0 : 0.14 + (this.difficulty - 0.22) * 0.34;
+    const twoCar = this.difficulty < 0.28 ? 0 : 0.08 + (this.difficulty - 0.28) * 0.22;
     if (roll < 0.1) {
       this.entities.push({ kind: "boost", z, x: lanes[0], hw: 0.12, vz: 0, variant: 0, color: 0 });
       if (z > 420 && Math.random() < 0.55) this.entities.push(this.makeTraffic(z + 6, lanes[1]));
