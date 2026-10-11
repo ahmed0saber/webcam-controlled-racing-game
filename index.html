@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#07101c" />
+  <meta name="description" content="Air Steering Wheel is a browser arcade racer you steer with your hands in front of a webcam, or with the keyboard." />
+  <title>Air Steering Wheel</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='22' fill='%2307101c' stroke='%233ee0ff' stroke-width='6'/%3E%3Ccircle cx='32' cy='32' r='5' fill='%23ffb020'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body data-state="MENU" data-mode="keyboard">
+  <div class="bg-glow" aria-hidden="true"></div>
+  <div class="app">
+    <header class="hud">
+      <p class="brand">
+        <svg class="logo-mark" viewBox="0 0 64 64" aria-hidden="true">
+          <circle cx="32" cy="32" r="22" fill="none" stroke="currentColor" stroke-width="4"></circle>
+          <circle cx="32" cy="32" r="4" fill="currentColor"></circle>
+          <path d="M32 8v12M32 44v12M8 32h12M44 32h12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"></path>
+        </svg>
+        <span>Air Steering</span>
+      </p>
+      <p class="hud-stat"><span class="hud-label">Score</span> <strong id="hud-score">0</strong></p>
+      <p class="hud-stat"><span class="hud-label">Coins</span> <strong id="hud-coins">0</strong></p>
+      <p class="hud-stat"><span class="hud-label">Speed</span> <strong id="hud-speed">0</strong><span class="unit">km/h</span></p>
+      <p class="hud-stat"><span class="hud-label">Best</span> <strong id="hud-best">0</strong></p>
+      <p class="hud-stat"><span class="hud-label">Lives</span> <span id="hud-lives" class="lives" aria-label="3 lives remaining"><i></i><i></i><i></i></span></p>
+      <p id="hud-boost" class="hud-stat hud-boost" hidden>Boost</p>
+      <button id="btn-pause" class="btn btn-ghost btn-pause" type="button" hidden>Pause</button>
+    </header>
+
+    <main class="stage" id="stage" tabindex="-1">
+      <canvas id="game-canvas" aria-label="Racing game view"></canvas>
+      <p id="offroad-banner" class="banner" hidden>Off the road — steer back on</p>
+      <p id="toast" class="toast" hidden role="status"></p>
+
+      <section id="overlay-menu" class="overlay">
+        <div class="card menu-card">
+          <svg class="logo-mark logo-mark-lg" viewBox="0 0 64 64" aria-hidden="true">
+            <circle cx="32" cy="32" r="22" fill="none" stroke="currentColor" stroke-width="4"></circle>
+            <circle cx="32" cy="32" r="4" fill="currentColor"></circle>
+            <path d="M32 8v12M32 44v12M8 32h12M44 32h12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"></path>
+          </svg>
+          <h1 id="game-title">Air Steering Wheel</h1>
+          <p class="tagline">Hold an invisible wheel. Turn your hands. Drive.</p>
+          <p class="menu-best">Best score <strong id="menu-best">0</strong></p>
+          <div class="menu-actions">
+            <button id="btn-play-camera" class="btn btn-primary" type="button">Play with camera</button>
+            <button id="btn-play-keyboard" class="btn btn-accent" type="button">Play with keyboard</button>
+            <button id="btn-menu-sound" class="btn btn-ghost" type="button" aria-pressed="true">Sound on</button>
+          </div>
+          <div class="help">
+            <h2>How to play</h2>
+            <ul>
+              <li>Camera: enable the webcam, hold both hands up like a steering wheel, then calibrate straight ahead.</li>
+              <li>Turning the wheel left steers left. Turning it right steers right.</li>
+              <li>Keyboard: A / Left and D / Right steer. The car cruises. W / Up adds speed, S / Down brakes.</li>
+              <li>Space pauses. Esc opens the pause menu. Collect coins, grab boosts, and avoid traffic.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="overlay-setup" class="overlay" hidden>
+        <div class="card setup-card" role="dialog" aria-modal="true" aria-labelledby="setup-title">
+          <p id="setup-kicker" class="kicker">Step 1 of 3</p>
+          <h2 id="setup-title">Camera</h2>
+
+          <div id="step-1">
+            <p>Hold both hands up so both wrists stay in frame. The preview is mirrored so your left stays on the left.</p>
+            <button id="btn-enable-camera" class="btn btn-primary" type="button">Enable camera</button>
+            <p id="camera-error" class="error" hidden></p>
+            <div class="row">
+              <button id="btn-step1-next" class="btn btn-accent" type="button" hidden>Next</button>
+              <button id="btn-step1-recal" class="btn btn-ghost" type="button" hidden>Recalibrate</button>
+              <button id="btn-step1-keyboard" class="btn btn-ghost" type="button">Play with keyboard</button>
+            </div>
+          </div>
+
+          <div id="step-2" hidden>
+            <p>Hold both hands in front of you as if you are gripping a wheel.</p>
+            <ul class="checklist">
+              <li id="check-wrists">Wrists: not in view</li>
+            </ul>
+            <div class="row">
+              <button id="btn-step2-back" class="btn btn-ghost" type="button">Back</button>
+              <button id="btn-step2-next" class="btn btn-accent" type="button" disabled>Hold that pose</button>
+            </div>
+          </div>
+
+          <div id="step-3" hidden>
+            <p id="calib-status">Hold the imaginary wheel straight and keep still.</p>
+            <div id="calib-progress-bar" class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Calibration progress">
+              <div id="calib-progress"></div>
+            </div>
+            <div class="row">
+              <button id="btn-step3-back" class="btn btn-ghost" type="button">Back</button>
+            </div>
+          </div>
+
+          <button id="btn-setup-close" class="btn btn-ghost btn-block" type="button">Return to menu</button>
+        </div>
+      </section>
+
+      <section id="overlay-pause" class="overlay" hidden>
+        <div class="card" role="dialog" aria-modal="true" aria-labelledby="pause-title">
+          <h2 id="pause-title">Paused</h2>
+          <p id="pause-note" class="note">The road is frozen.</p>
+          <div class="menu-actions">
+            <button id="btn-resume" class="btn btn-primary" type="button">Resume</button>
+            <button id="btn-restart" class="btn btn-accent" type="button">Restart</button>
+            <button id="btn-recalibrate" class="btn btn-ghost" type="button">Recalibrate steering</button>
+            <button id="btn-switch-mode" class="btn btn-ghost" type="button">Switch to camera</button>
+            <button id="btn-pause-sound" class="btn btn-ghost" type="button" aria-pressed="true">Sound on</button>
+            <button id="btn-quit" class="btn btn-ghost" type="button">Return to menu</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="overlay-over" class="overlay" hidden>
+        <div class="card" role="dialog" aria-modal="true" aria-labelledby="over-title">
+          <h2 id="over-title">Run complete</h2>
+          <p id="over-record" class="record" hidden>New record</p>
+          <dl class="stats">
+            <div><dt>Score</dt><dd id="over-score">0</dd></div>
+            <div><dt>Distance</dt><dd id="over-distance">0 m</dd></div>
+            <div><dt>Coins</dt><dd id="over-coins">0</dd></div>
+            <div><dt>Collisions</dt><dd id="over-collisions">0</dd></div>
+            <div><dt>Top speed</dt><dd id="over-top">0 km/h</dd></div>
+            <div><dt>Time</dt><dd id="over-time">0:00</dd></div>
+            <div><dt>Best</dt><dd id="over-best">0</dd></div>
+          </dl>
+          <div class="menu-actions">
+            <button id="btn-again" class="btn btn-primary" type="button">Play again</button>
+            <button id="btn-over-menu" class="btn btn-ghost" type="button">Return to menu</button>
+          </div>
+        </div>
+      </section>
+
+      <div id="overlay-countdown" class="overlay overlay-clear" hidden>
+        <p id="countdown-label" class="countdown-label" aria-live="assertive">3</p>
+      </div>
+
+      <div class="touch-controls">
+        <button id="touch-left" class="btn btn-ghost" type="button">Left</button>
+        <button id="touch-brake" class="btn btn-ghost" type="button">Brake</button>
+        <button id="touch-gas" class="btn btn-ghost" type="button">Gas</button>
+        <button id="touch-right" class="btn btn-ghost" type="button">Right</button>
+      </div>
+    </main>
+
+    <aside class="dock">
+      <details class="preview-panel" open>
+        <summary>Camera preview</summary>
+        <div class="preview-frame">
+          <video id="webcam" class="webcam-video" playsinline muted></video>
+          <canvas id="preview-canvas" width="480" height="360" aria-label="Mirrored camera preview with steering wheel overlay"></canvas>
+        </div>
+        <p class="preview-note">Mirrored preview. Video stays on this device.</p>
+        <p class="tracking-row">
+          <span id="tracking-dot" class="tracking-dot" data-quality="lost"></span>
+          <span id="tracking-text" role="status">Camera off</span>
+        </p>
+        <div class="gauge" aria-hidden="true">
+          <div class="gauge-scale"></div>
+          <div id="steer-needle" class="gauge-needle"></div>
+        </div>
+        <p id="steer-direction" class="steer-readout">Straight</p>
+        <details class="debug">
+          <summary>Steering details</summary>
+          <dl class="debug-list">
+            <div><dt>Angle</dt><dd id="debug-angle">0°</dd></div>
+            <div><dt>Neutral</dt><dd id="debug-neutral">Not set</dd></div>
+            <div><dt>Relative</dt><dd id="debug-relative">0°</dd></div>
+            <div><dt>Steer</dt><dd id="debug-steer">0.00</dd></div>
+            <div><dt>Tracking</dt><dd id="debug-quality">Lost</dd></div>
+          </dl>
+        </details>
+      </details>
+
+      <div class="dock-controls">
+        <div class="segmented" role="group" aria-label="Control mode">
+          <button id="btn-mode-camera" class="btn btn-ghost" type="button" aria-pressed="false">Camera</button>
+          <button id="btn-mode-keyboard" class="btn btn-ghost is-active" type="button" aria-pressed="true">Keyboard</button>
+        </div>
+        <label class="slider-label" for="sensitivity">Steering sensitivity <strong id="sensitivity-value">1.00×</strong></label>
+        <input id="sensitivity" type="range" min="0.5" max="2" step="0.05" value="1" />
+        <div class="row">
+          <button id="btn-calibrate" class="btn btn-ghost" type="button">Calibrate</button>
+          <button id="btn-sound" class="btn btn-ghost" type="button" aria-pressed="true">Sound on</button>
+        </div>
+        <p id="control-hint" class="hint">A/D or arrow keys steer. The car cruises. W speeds up, S brakes. Space pauses.</p>
+      </div>
+    </aside>
+  </div>
+  <p id="live-region" class="sr-only" aria-live="polite"></p>
+  <script type="module" src="js/main.js"></script>
+  <noscript><p class="noscript">Air Steering Wheel needs JavaScript to run.</p></noscript>
+</body>
+</html>
