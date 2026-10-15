@@ -260,9 +260,6 @@ button, input, select { font: inherit; }
   background: #7f93ad;
   box-shadow: none;
 }
-  background: var(--gold);
-  box-shadow: 0 0 0 3px rgba(255, 209, 92, 0.18);
-}
 
 .gauge {
   position: relative;
